@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const GROUND_Y = 600;
   let gameOver = false;
   let isPaused = false;
+  let gameStarted = false; // Trạng thái đã bắt đầu game chưa
   let lives = 3;
   let currentScore = 0;
 
@@ -29,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
   container.insertBefore(pauseBtn, canvas);
 
   pauseBtn.addEventListener("click", () => {
-    initAudio(); // Đảm bảo mở AudioContext nếu bấm nút Pause trước
+    if (!gameStarted) return;
     togglePause();
   });
 
@@ -42,13 +43,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM (TỐI ƯU CHO MOBILE) ---
+  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM (TỐI ƯU TUỆT ĐỐI CHO DI ĐỘNG) ---
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
   let bgmInterval = null;
-  let isAudioUnlocked = false;
 
-  // Khởi tạo AudioContext & Nạp trước Web Speech API khi người dùng tương tác lần đầu
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new AudioCtx();
@@ -56,45 +55,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
-
-    if (!isAudioUnlocked) {
-      // Mẹo Unlock AudioContext trên Safari/iOS: Phát 1 âm thanh câm ngắn
-      const buffer = audioCtx.createBuffer(1, 1, 22050);
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-
-      // Mẹo Unlock SpeechSynthesis trên Mobile: Đọc thử 1 chuỗi rỗng
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.getVoices();
-        const silentSpeech = new SpeechSynthesisUtterance("");
-        window.speechSynthesis.speak(silentSpeech);
-      }
-
-      isAudioUnlocked = true;
-    }
-
     startBackgroundMusic();
   }
 
-  // Lắng nghe thao tác chạm/bấm đầu tiên để mở khóa âm thanh ngay lập tức
-  const unlockAudioEvents = ["touchstart", "touchend", "mousedown", "keydown"];
-  function handleFirstInteraction() {
-    initAudio();
-    // Đọc từ hiện tại ngay sau khi unlock âm thanh thành công trên Mobile
-    if (currentTarget) {
-      speakEnglishWord(currentTarget.en);
-    }
-    unlockAudioEvents.forEach(evt => window.removeEventListener(evt, handleFirstInteraction));
-  }
-  unlockAudioEvents.forEach(evt => window.addEventListener(evt, handleFirstInteraction, { once: true }));
-
-  // Hàm phát âm từ tiếng Anh
+  // Phát âm tiếng Anh chuẩn Anh - Mỹ trực tiếp không qua độ trễ
   function speakEnglishWord(word) {
     if (!("speechSynthesis" in window)) return;
 
-    window.speechSynthesis.cancel(); // Xóa hàng chờ phát âm cũ
+    window.speechSynthesis.cancel(); // Xóa các câu lệnh chờ trước đó
 
     const utterance = new SpeechSynthesisUtterance(word);
     utterance.lang = "en-US";
@@ -107,13 +75,10 @@ document.addEventListener("DOMContentLoaded", () => {
       utterance.voice = usVoice;
     }
 
-    // Đảm bảo trình duyệt di động gọi phát âm trong luồng hoạt động
-    setTimeout(() => {
-      window.speechSynthesis.speak(utterance);
-    }, 50);
+    window.speechSynthesis.speak(utterance);
   }
 
-  // Nhạc nền Chiptune
+  // Nhạc nền Chiptune - ĐÃ TĂNG ÂM LƯỢNG LÊN RẤT LỚN (0.45)
   function startBackgroundMusic() {
     if (bgmInterval || !audioCtx) return;
 
@@ -129,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let noteIdx = 0;
 
     bgmInterval = setInterval(() => {
-      if (gameOver || isPaused || !audioCtx) return;
+      if (gameOver || isPaused || !gameStarted || !audioCtx) return;
 
       const note = melody[noteIdx];
       const osc = audioCtx.createOscillator();
@@ -138,7 +103,8 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(note.freq, audioCtx.currentTime);
 
-      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      // Âm lượng nhạc nền đã được tăng từ 0.15 lên 0.45 (mạnh mẽ, rõ ràng)
+      gain.gain.setValueAtTime(0.45, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + note.duration - 0.02);
 
       osc.connect(gain);
@@ -151,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 220);
   }
 
-  // Hiệu ứng âm thanh
+  // Hiệu ứng âm thanh game
   function playSound(type) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
@@ -165,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "sine";
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.15);
-      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.setValueAtTime(0.5, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
       osc.start(now);
       osc.stop(now + 0.15);
@@ -173,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(180, now);
       osc.frequency.linearRampToValueAtTime(100, now + 0.25);
-      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.setValueAtTime(0.6, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
       osc.start(now);
       osc.stop(now + 0.25);
@@ -182,7 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.frequency.setValueAtTime(440, now);
       osc.frequency.setValueAtTime(554.37, now + 0.1);
       osc.frequency.setValueAtTime(659.25, now + 0.2);
-      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.setValueAtTime(0.5, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
       osc.start(now);
       osc.stop(now + 0.4);
@@ -227,14 +193,35 @@ document.addEventListener("DOMContentLoaded", () => {
   let isTouchingLeft = false;
   let isTouchingRight = false;
 
-  window.addEventListener("keydown", (e) => {
+  // Xử lý sự kiện khi học sinh chạm màn hình lần đầu để KÍCH HOẠT GAME & ÂM THANH
+  function startGame() {
+    if (gameStarted) return;
+    gameStarted = true;
+
     initAudio();
-    if (e.code === "KeyP") {
-      togglePause();
-      return;
+
+    // Mẹo giải phóng hoàn toàn giọng đọc trên iOS/Android khi chạm nút Bắt đầu
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      const unlockSpeech = new SpeechSynthesisUtterance("");
+      window.speechSynthesis.speak(unlockSpeech);
+    }
+
+    setNextTargetWord();
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (!gameStarted) {
+      startGame();
+    } else {
+      if (e.code === "KeyP") {
+        togglePause();
+        return;
+      }
     }
     keys[e.code] = true;
   });
+
   window.addEventListener("keyup", (e) => (keys[e.code] = false));
 
   function getCanvasCoords(touch) {
@@ -249,8 +236,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
-    initAudio();
+    if (!gameStarted) {
+      startGame();
+      return;
+    }
     if (isPaused) return;
+
     for (let i = 0; i < e.touches.length; i++) {
       const pos = getCanvasCoords(e.touches[i]);
       if (pos.y > GROUND_Y) {
@@ -264,7 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    if (isPaused) return;
+    if (!gameStarted || isPaused) return;
     for (let i = 0; i < e.touches.length; i++) {
       const pos = getCanvasCoords(e.touches[i]);
       if (pos.y <= GROUND_Y) {
@@ -292,25 +283,21 @@ document.addEventListener("DOMContentLoaded", () => {
     currentTarget = getRandomWord();
     const targetEl = document.getElementById("target-word");
     if (targetEl) {
-      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 20px; margin-left:8px; display:inline-block; padding:2px 6px;">🔊</span>`;
+      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 22px; margin-left:8px; display:inline-block; padding:2px 8px;">🔊</span>`;
       
       const speakBtn = document.getElementById("speak-btn");
       if (speakBtn) {
-        speakBtn.addEventListener("click", (e) => {
+        const triggerSpeak = (e) => {
           e.stopPropagation();
           initAudio();
           speakEnglishWord(currentTarget.en);
-        });
-        speakBtn.addEventListener("touchstart", (e) => {
-          e.stopPropagation();
-          initAudio();
-          speakEnglishWord(currentTarget.en);
-        }, { passive: true });
+        };
+        speakBtn.addEventListener("click", triggerSpeak);
+        speakBtn.addEventListener("touchstart", triggerSpeak, { passive: true });
       }
     }
-    
-    // Tự động đọc từ khi chuyển từ mới (nếu đã kích hoạt audio)
-    if (isAudioUnlocked) {
+
+    if (gameStarted) {
       speakEnglishWord(currentTarget.en);
     }
   }
@@ -576,6 +563,23 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
+  // Màn hình bắt đầu game (Dùng để unlock audio điện thoại)
+  function drawStartScreen() {
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#00f0ff";
+    ctx.font = "bold 26px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("🎮 CHẠM ĐỂ BẮT ĐẦU", canvas.width / 2, canvas.height / 2 - 15);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "15px Arial";
+    ctx.fillText("Chạm vào màn hình để kích hoạt Âm thanh & Trò chơi", canvas.width / 2, canvas.height / 2 + 20);
+    ctx.restore();
+  }
+
   function drawPauseScreen() {
     ctx.save();
     ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
@@ -594,6 +598,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function gameLoop() {
     if (gameOver) return;
+
+    if (!gameStarted) {
+      drawStartScreen();
+      requestAnimationFrame(gameLoop);
+      return;
+    }
 
     if (isPaused) {
       drawPauseScreen();
