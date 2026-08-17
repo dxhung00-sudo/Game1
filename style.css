@@ -1,0 +1,73 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none; /* Chặn chọn văn bản khi chạm màn hình */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body {
+  background-color: #090d16;
+  color: #ffffff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden; /* Chặn cuộn trang trên điện thoại */
+  touch-action: none; /* Chặn thao tác vuốt mặc định của trình duyệt */
+}
+
+#game-container {
+  position: relative;
+  width: 100%;
+  max-width: 450px;
+  height: 100vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background: #0f172a;
+  padding: 10px;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+}
+
+#ui-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  background: rgba(30, 41, 59, 0.8);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #00f0ff;
+  font-size: 14px;
+}
+
+.ui-box {
+  font-weight: bold;
+}
+
+#target-container {
+  margin: 8px 0;
+  font-size: 18px;
+  color: #ff007f;
+  text-shadow: 0 0 8px rgba(255, 0, 127, 0.6);
+}
+
+#target-word {
+  color: #00f0ff;
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+#gameCanvas {
+  width: 100%;
+  height: auto;
+  flex-grow: 1;
+  background-color: #020617;
+  border: 2px solid #00f0ff;
+  border-radius: 10px;
+  touch-action: none;
+}

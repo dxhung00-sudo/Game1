@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <!-- Thẻ viewport tối ưu giao diện màn hình dọc điện thoại -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Vocabulary Comet Survival</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <div id="ui-header">
+      <div class="ui-box">Gói: <span id="pack-name">1</span></div>
+      <div class="ui-box">Lv: <span id="level">1</span></div>
+      <div class="ui-box">Mạng: <span id="lives">❤️❤️❤️</span></div>
+      <div class="ui-box">Điểm: <span id="score">0</span>/<span id="target-score">15</span></div>
+    </div>
+
+    <div id="target-container">
+      Từ cần hứng: <strong id="target-word">...</strong>
+    </div>
+
+    <!-- Canvas chuẩn tỉ lệ 400x650 -->
+    <canvas id="gameCanvas" width="400" height="650"></canvas>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
