@@ -4,10 +4,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const GROUND_Y = 600;
   let gameOver = false;
+  let isPaused = false; // Trạng thái tạm dừng
   let lives = 3;
   let currentScore = 0;
 
-  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM TIẾNG ANH (Web Speech API) ---
+  // --- TẠO NÚT TẠM DỪNG (PAUSE BUTTON) TRÊN UI ---
+  const container = canvas.parentElement || document.body;
+  const pauseBtn = document.createElement("button");
+  pauseBtn.id = "pause-btn";
+  pauseBtn.innerText = "⏸️ Tạm dừng";
+  pauseBtn.style.cssText = `
+    display: block;
+    margin: 8px auto;
+    padding: 6px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #00f0ff;
+    background: #1e293b;
+    border: 1px solid #00f0ff;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,240,255,0.3);
+  `;
+  container.insertBefore(pauseBtn, canvas);
+
+  pauseBtn.addEventListener("click", () => togglePause());
+
+  function togglePause() {
+    if (gameOver) return;
+    isPaused = !isPaused;
+    pauseBtn.innerText = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
+    if (!isPaused) {
+      gameLoop(); // Chạy lại loop khi bỏ tạm dừng
+    }
+  }
+
+  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM TIẾNG ANH ---
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
   let bgmInterval = null;
@@ -22,18 +54,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Hàm phát âm từ tiếng Anh chuẩn Anh - Mỹ (en-US)
+  // Phát âm tiếng Anh với ÂM LƯỢNG TO NHẤT (volume = 1.0)
   function speakEnglishWord(word) {
     if (!("speechSynthesis" in window)) return;
 
-    // Hủy các câu đọc trước đó nếu còn
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = "en-US"; // Thiết lập giọng Anh - Mỹ
-    utterance.rate = 0.85;    // Tốc độ đọc vừa phải cho học sinh dễ nghe
+    utterance.lang = "en-US";
+    utterance.rate = 0.85;
+    utterance.volume = 1.0; // Âm lượng tối đa (100%)
 
-    // Lấy danh sách giọng đọc của hệ thống để ưu tiên giọng en-US chuẩn
     const voices = window.speechSynthesis.getVoices();
     const usVoice = voices.find(v => v.lang === "en-US" || v.lang === "en_US");
     if (usVoice) {
@@ -43,7 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.speechSynthesis.speak(utterance);
   }
 
-  // Nhạc nền Chiptune 8-bit lặp lại
+  // Nhạc nền Chiptune với ÂM LƯỢNG TO HƠN
   function startBackgroundMusic() {
     if (bgmInterval) return;
 
@@ -59,7 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let noteIdx = 0;
 
     bgmInterval = setInterval(() => {
-      if (gameOver || !audioCtx) return;
+      if (gameOver || isPaused || !audioCtx) return; // Ngưng phát nhạc khi Pause
 
       const note = melody[noteIdx];
       const osc = audioCtx.createOscillator();
@@ -68,7 +99,8 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(note.freq, audioCtx.currentTime);
 
-      gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+      // Đã tăng âm lượng nhạc nền từ 0.03 lên 0.15 (to và rõ hơn)
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + note.duration - 0.02);
 
       osc.connect(gain);
@@ -81,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 220);
   }
 
-  // Hiệu ứng âm thanh game
+  // Hiệu ứng âm thanh
   function playSound(type) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
@@ -95,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "sine";
       osc.frequency.setValueAtTime(523.25, now);
       osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.15);
-      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.setValueAtTime(0.4, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
       osc.start(now);
       osc.stop(now + 0.15);
@@ -103,7 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(180, now);
       osc.frequency.linearRampToValueAtTime(100, now + 0.25);
-      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.setValueAtTime(0.5, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
       osc.start(now);
       osc.stop(now + 0.25);
@@ -112,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.frequency.setValueAtTime(440, now);
       osc.frequency.setValueAtTime(554.37, now + 0.1);
       osc.frequency.setValueAtTime(659.25, now + 0.2);
-      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.setValueAtTime(0.4, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
       osc.start(now);
       osc.stop(now + 0.4);
@@ -159,6 +191,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.addEventListener("keydown", (e) => {
     initAudio();
+    if (e.code === "KeyP") {
+      togglePause(); // Nhấn phím 'P' để tạm dừng nhanh
+      return;
+    }
     keys[e.code] = true;
   });
   window.addEventListener("keyup", (e) => (keys[e.code] = false));
@@ -176,6 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
   canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     initAudio();
+    if (isPaused) return;
     for (let i = 0; i < e.touches.length; i++) {
       const pos = getCanvasCoords(e.touches[i]);
       if (pos.y > GROUND_Y) {
@@ -189,6 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
+    if (isPaused) return;
     for (let i = 0; i < e.touches.length; i++) {
       const pos = getCanvasCoords(e.touches[i]);
       if (pos.y <= GROUND_Y) {
@@ -216,9 +254,8 @@ document.addEventListener("DOMContentLoaded", () => {
     currentTarget = getRandomWord();
     const targetEl = document.getElementById("target-word");
     if (targetEl) {
-      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 16px;">🔊</span>`;
+      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 18px; margin-left:6px;">🔊</span>`;
       
-      // Đăng ký sự kiện click nút Loa phát lại âm thanh
       const speakBtn = document.getElementById("speak-btn");
       if (speakBtn) {
         speakBtn.addEventListener("click", () => {
@@ -227,7 +264,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
     }
-    // Tự động đọc từ tiếng Anh mới xuất hiện
     speakEnglishWord(currentTarget.en);
   }
 
@@ -492,8 +528,30 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
+  // Vẽ màn hình Tạm dừng
+  function drawPauseScreen() {
+    ctx.save();
+    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#00f0ff";
+    ctx.font = "bold 28px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("ĐÃ TẠM DỪNG", canvas.width / 2, canvas.height / 2 - 10);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px Arial";
+    ctx.fillText("Nhấn '▶️ Tiếp tục' hoặc phím P để chơi tiếp", canvas.width / 2, canvas.height / 2 + 25);
+    ctx.restore();
+  }
+
   function gameLoop() {
     if (gameOver) return;
+
+    if (isPaused) {
+      drawPauseScreen();
+      return; // Ngừng cập nhật trạng thái khi Tạm dừng
+    }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -593,7 +651,6 @@ document.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(gameLoop);
   }
 
-  // Khởi tạo giọng đọc trước
   if ("speechSynthesis" in window) {
     window.speechSynthesis.getVoices();
   }
