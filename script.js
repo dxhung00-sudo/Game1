@@ -7,19 +7,81 @@ document.addEventListener("DOMContentLoaded", () => {
   let lives = 3;
   let currentScore = 0;
 
-  // --- HỆ THỐNG ÂM THANH (Mở khóa trên Android) ---
+  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM TIẾNG ANH (Web Speech API) ---
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
+  let bgmInterval = null;
 
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new AudioCtx();
+      startBackgroundMusic();
     }
     if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
   }
 
+  // Hàm phát âm từ tiếng Anh chuẩn Anh - Mỹ (en-US)
+  function speakEnglishWord(word) {
+    if (!("speechSynthesis" in window)) return;
+
+    // Hủy các câu đọc trước đó nếu còn
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = "en-US"; // Thiết lập giọng Anh - Mỹ
+    utterance.rate = 0.85;    // Tốc độ đọc vừa phải cho học sinh dễ nghe
+
+    // Lấy danh sách giọng đọc của hệ thống để ưu tiên giọng en-US chuẩn
+    const voices = window.speechSynthesis.getVoices();
+    const usVoice = voices.find(v => v.lang === "en-US" || v.lang === "en_US");
+    if (usVoice) {
+      utterance.voice = usVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Nhạc nền Chiptune 8-bit lặp lại
+  function startBackgroundMusic() {
+    if (bgmInterval) return;
+
+    const melody = [
+      { freq: 261.63, duration: 0.2 }, { freq: 329.63, duration: 0.2 },
+      { freq: 392.00, duration: 0.2 }, { freq: 523.25, duration: 0.3 },
+      { freq: 392.00, duration: 0.2 }, { freq: 329.63, duration: 0.2 },
+      { freq: 293.66, duration: 0.2 }, { freq: 349.23, duration: 0.2 },
+      { freq: 440.00, duration: 0.2 }, { freq: 587.33, duration: 0.3 },
+      { freq: 440.00, duration: 0.2 }, { freq: 349.23, duration: 0.2 }
+    ];
+
+    let noteIdx = 0;
+
+    bgmInterval = setInterval(() => {
+      if (gameOver || !audioCtx) return;
+
+      const note = melody[noteIdx];
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(note.freq, audioCtx.currentTime);
+
+      gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + note.duration - 0.02);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start();
+      osc.stop(audioCtx.currentTime + note.duration);
+
+      noteIdx = (noteIdx + 1) % melody.length;
+    }, 220);
+  }
+
+  // Hiệu ứng âm thanh game
   function playSound(type) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
@@ -91,19 +153,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentTarget = null;
   const keys = {};
 
-  // Biến điều khiển cảm ứng
   let touchMoveTargetX = null;
   let isTouchingLeft = false;
   let isTouchingRight = false;
 
-  // Lắng nghe sự kiện Bàn phím
   window.addEventListener("keydown", (e) => {
     initAudio();
     keys[e.code] = true;
   });
   window.addEventListener("keyup", (e) => (keys[e.code] = false));
 
-  // --- XỬ LÝ CẢM ỨNG TRÊN ĐIỆN THOẠI ANDROID ---
   function getCanvasCoords(touch) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -117,15 +176,12 @@ document.addEventListener("DOMContentLoaded", () => {
   canvas.addEventListener("touchstart", (e) => {
     e.preventDefault();
     initAudio();
-    
     for (let i = 0; i < e.touches.length; i++) {
       const pos = getCanvasCoords(e.touches[i]);
       if (pos.y > GROUND_Y) {
-        // Chạm vào vùng nút ảo dưới mặt đất
         if (pos.x < canvas.width / 2) isTouchingLeft = true;
         else isTouchingRight = true;
       } else {
-        // Vuốt di chuyển trực tiếp
         touchMoveTargetX = pos.x;
       }
     }
@@ -159,10 +215,22 @@ document.addEventListener("DOMContentLoaded", () => {
   function setNextTargetWord() {
     currentTarget = getRandomWord();
     const targetEl = document.getElementById("target-word");
-    if (targetEl) targetEl.textContent = currentTarget.en;
+    if (targetEl) {
+      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 16px;">🔊</span>`;
+      
+      // Đăng ký sự kiện click nút Loa phát lại âm thanh
+      const speakBtn = document.getElementById("speak-btn");
+      if (speakBtn) {
+        speakBtn.addEventListener("click", () => {
+          initAudio();
+          speakEnglishWord(currentTarget.en);
+        });
+      }
+    }
+    // Tự động đọc từ tiếng Anh mới xuất hiện
+    speakEnglishWord(currentTarget.en);
   }
 
-  // --- HỆ THỐNG HIỆU ỨNG HẠT ---
   let particles = [];
   let floatTexts = [];
   let screenFlashAlpha = 0;
@@ -228,7 +296,6 @@ document.addEventListener("DOMContentLoaded", () => {
     screenFlashAlpha = 0.4;
   }
 
-  // --- LỚP NGƯỜI CHƠI (PHI THUYỀN) ---
   class Player {
     constructor() {
       this.width = 60;
@@ -240,8 +307,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     update() {
       let moving = false;
-
-      // Xử lý di chuyển bằng bàn phím hoặc nút chạm ảo
       if (keys["KeyA"] || keys["ArrowLeft"] || isTouchingLeft) {
         this.x -= this.speed;
         moving = true;
@@ -251,7 +316,6 @@ document.addEventListener("DOMContentLoaded", () => {
         moving = true;
       }
 
-      // Xử lý vuốt trực tiếp trên màn hình Android
       if (touchMoveTargetX !== null) {
         const playerCenterX = this.x + this.width / 2;
         const diff = touchMoveTargetX - playerCenterX;
@@ -291,15 +355,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   class FallingWord {
-    constructor(text) {
+    constructor(text, xPos, startY) {
       this.text = text;
-      this.width = 130;
+      this.width = 110;
       this.height = 40;
-      this.x = Math.random() * (canvas.width - this.width);
-      this.y = 80;
+      this.x = xPos;
+      this.y = startY;
 
       const packSpeed = PACKS[currentPackIdx].baseSpeed;
-      this.speed = packSpeed + (currentLevel * 0.15);
+      const randomSpeedOffset = (Math.random() - 0.5) * 0.6;
+      this.speed = packSpeed + (currentLevel * 0.15) + randomSpeedOffset;
     }
 
     update() {
@@ -317,7 +382,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.strokeRect(this.x, this.y, this.width, this.height);
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 15px Arial";
+      ctx.font = "bold 14px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(this.text, this.x + this.width / 2, this.y + this.height / 2);
@@ -327,25 +392,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const player = new Player();
   let fallingWords = [];
-  let spawnTimer = 0;
 
-  function spawnSingleWord() {
+  function spawnThreeWords() {
     if (!currentTarget) setNextTargetWord();
 
-    const hasCorrectOnScreen = fallingWords.some(w => w.text === currentTarget.vi);
-    let wordText = "";
-
-    if (!hasCorrectOnScreen && Math.random() > 0.5) {
-      wordText = currentTarget.vi;
-    } else {
-      let wrongWord = getRandomWord().vi;
-      while (wrongWord === currentTarget.vi) {
-        wrongWord = getRandomWord().vi;
-      }
-      wordText = wrongWord;
+    let wrong1 = getRandomWord().vi;
+    while (wrong1 === currentTarget.vi) {
+      wrong1 = getRandomWord().vi;
     }
 
-    fallingWords.push(new FallingWord(wordText));
+    let wrong2 = getRandomWord().vi;
+    while (wrong2 === currentTarget.vi || wrong2 === wrong1) {
+      wrong2 = getRandomWord().vi;
+    }
+
+    const wordOptions = [currentTarget.vi, wrong1, wrong2];
+    wordOptions.sort(() => Math.random() - 0.5);
+
+    const wordWidth = 110;
+    const padding = 15;
+    const generatedXPositions = [];
+
+    for (let i = 0; i < 3; i++) {
+      let randomX = 0;
+      let isOverlap = false;
+      let attempts = 0;
+
+      do {
+        isOverlap = false;
+        randomX = Math.random() * (canvas.width - wordWidth);
+
+        for (const existingX of generatedXPositions) {
+          if (Math.abs(randomX - existingX) < wordWidth + padding) {
+            isOverlap = true;
+            break;
+          }
+        }
+        attempts++;
+      } while (isOverlap && attempts < 100);
+
+      generatedXPositions.push(randomX);
+      const randomY = - (i * 70 + Math.random() * 60);
+
+      fallingWords.push(new FallingWord(wordOptions[i], randomX, randomY));
+    }
   }
 
   function checkLevelProgress() {
@@ -363,6 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentPackIdx >= PACKS.length) {
           alert("Chúc mừng! Bạn đã hoàn thành toàn bộ kho từ vựng!");
           gameOver = true;
+          if (bgmInterval) clearInterval(bgmInterval);
           return;
         }
         alert(`LÊN GÓI MỚI: ${PACKS[currentPackIdx].name}!`);
@@ -386,7 +477,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawTouchControls() {
-    // Vẽ vùng nút bấm ảo hỗ trợ chơi bằng 2 tay bên dưới mặt đất
     ctx.save();
     ctx.fillStyle = isTouchingLeft ? "rgba(0, 240, 255, 0.2)" : "rgba(255, 255, 255, 0.05)";
     ctx.fillRect(0, GROUND_Y, canvas.width / 2, canvas.height - GROUND_Y);
@@ -395,10 +485,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillRect(canvas.width / 2, GROUND_Y, canvas.width / 2, canvas.height - GROUND_Y);
 
     ctx.fillStyle = "#00f0ff";
-    ctx.font = "bold 22px Arial";
+    ctx.font = "bold 20px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("◀ SANG TRÁI", canvas.width * 0.25, GROUND_Y + 35);
-    ctx.fillText("SANG PHẢI ▶", canvas.width * 0.75, GROUND_Y + 35);
+    ctx.fillText("◀ TRÁI", canvas.width * 0.25, GROUND_Y + 35);
+    ctx.fillText("PHẢI ▶", canvas.width * 0.75, GROUND_Y + 35);
     ctx.restore();
   }
 
@@ -407,7 +497,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Màn hình mặt đất
     ctx.strokeStyle = "#00f0ff";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -415,7 +504,6 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.lineTo(canvas.width, GROUND_Y);
     ctx.stroke();
 
-    // Vẽ điều khiển ảo Android
     drawTouchControls();
 
     player.update();
@@ -433,9 +521,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (floatTexts[i].alpha <= 0) floatTexts.splice(i, 1);
     }
 
-    spawnTimer++;
-    if (spawnTimer % 75 === 0) {
-      spawnSingleWord();
+    if (fallingWords.length === 0) {
+      spawnThreeWords();
     }
 
     for (let i = fallingWords.length - 1; i >= 0; i--) {
@@ -457,18 +544,22 @@ document.addEventListener("DOMContentLoaded", () => {
           createScoreEffect(w.x + w.width / 2, w.y);
           checkLevelProgress();
           setNextTargetWord();
+          fallingWords = [];
+          updateUI();
+          break;
         } else {
           lives--;
           triggerDamageEffect();
+          fallingWords.splice(i, 1);
           if (lives <= 0) {
             alert("Game Over! Bạn đã chọn sai từ.");
+            if (bgmInterval) clearInterval(bgmInterval);
             location.reload();
             return;
           }
+          updateUI();
+          continue;
         }
-        fallingWords.splice(i, 1);
-        updateUI();
-        continue;
       }
 
       if (w.y + w.height >= GROUND_Y) {
@@ -477,13 +568,17 @@ document.addEventListener("DOMContentLoaded", () => {
           triggerDamageEffect();
           if (lives <= 0) {
             alert("Game Over! Bạn đã để từ đúng rơi xuống đất.");
+            if (bgmInterval) clearInterval(bgmInterval);
             location.reload();
             return;
           }
           setNextTargetWord();
+          fallingWords = [];
           updateUI();
+          break;
+        } else {
+          fallingWords.splice(i, 1);
         }
-        fallingWords.splice(i, 1);
       }
     }
 
@@ -496,6 +591,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     requestAnimationFrame(gameLoop);
+  }
+
+  // Khởi tạo giọng đọc trước
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.getVoices();
   }
 
   setNextTargetWord();
