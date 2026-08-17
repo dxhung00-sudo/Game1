@@ -4,11 +4,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const GROUND_Y = 600;
   let gameOver = false;
-  let isPaused = false; // Trạng thái tạm dừng
+  let isPaused = false;
   let lives = 3;
   let currentScore = 0;
 
-  // --- TẠO NÚT TẠM DỪNG (PAUSE BUTTON) TRÊN UI ---
+  // --- TẠO NÚT TẠM DỪNG (PAUSE BUTTON) ---
   const container = canvas.parentElement || document.body;
   const pauseBtn = document.createElement("button");
   pauseBtn.id = "pause-btn";
@@ -28,42 +28,78 @@ document.addEventListener("DOMContentLoaded", () => {
   `;
   container.insertBefore(pauseBtn, canvas);
 
-  pauseBtn.addEventListener("click", () => togglePause());
+  pauseBtn.addEventListener("click", () => {
+    initAudio(); // Đảm bảo mở AudioContext nếu bấm nút Pause trước
+    togglePause();
+  });
 
   function togglePause() {
     if (gameOver) return;
     isPaused = !isPaused;
     pauseBtn.innerText = isPaused ? "▶️ Tiếp tục" : "⏸️ Tạm dừng";
     if (!isPaused) {
-      gameLoop(); // Chạy lại loop khi bỏ tạm dừng
+      gameLoop();
     }
   }
 
-  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM TIẾNG ANH ---
+  // --- HỆ THỐNG ÂM THANH & PHÁT ÂM (TỐI ƯU CHO MOBILE) ---
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   let audioCtx = null;
   let bgmInterval = null;
+  let isAudioUnlocked = false;
 
+  // Khởi tạo AudioContext & Nạp trước Web Speech API khi người dùng tương tác lần đầu
   function initAudio() {
     if (!audioCtx) {
       audioCtx = new AudioCtx();
-      startBackgroundMusic();
     }
     if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
+
+    if (!isAudioUnlocked) {
+      // Mẹo Unlock AudioContext trên Safari/iOS: Phát 1 âm thanh câm ngắn
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+
+      // Mẹo Unlock SpeechSynthesis trên Mobile: Đọc thử 1 chuỗi rỗng
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.getVoices();
+        const silentSpeech = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(silentSpeech);
+      }
+
+      isAudioUnlocked = true;
+    }
+
+    startBackgroundMusic();
   }
 
-  // Phát âm tiếng Anh với ÂM LƯỢNG TO NHẤT (volume = 1.0)
+  // Lắng nghe thao tác chạm/bấm đầu tiên để mở khóa âm thanh ngay lập tức
+  const unlockAudioEvents = ["touchstart", "touchend", "mousedown", "keydown"];
+  function handleFirstInteraction() {
+    initAudio();
+    // Đọc từ hiện tại ngay sau khi unlock âm thanh thành công trên Mobile
+    if (currentTarget) {
+      speakEnglishWord(currentTarget.en);
+    }
+    unlockAudioEvents.forEach(evt => window.removeEventListener(evt, handleFirstInteraction));
+  }
+  unlockAudioEvents.forEach(evt => window.addEventListener(evt, handleFirstInteraction, { once: true }));
+
+  // Hàm phát âm từ tiếng Anh
   function speakEnglishWord(word) {
     if (!("speechSynthesis" in window)) return;
 
-    window.speechSynthesis.cancel();
+    window.speechSynthesis.cancel(); // Xóa hàng chờ phát âm cũ
 
     const utterance = new SpeechSynthesisUtterance(word);
     utterance.lang = "en-US";
     utterance.rate = 0.85;
-    utterance.volume = 1.0; // Âm lượng tối đa (100%)
+    utterance.volume = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
     const usVoice = voices.find(v => v.lang === "en-US" || v.lang === "en_US");
@@ -71,12 +107,15 @@ document.addEventListener("DOMContentLoaded", () => {
       utterance.voice = usVoice;
     }
 
-    window.speechSynthesis.speak(utterance);
+    // Đảm bảo trình duyệt di động gọi phát âm trong luồng hoạt động
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 50);
   }
 
-  // Nhạc nền Chiptune với ÂM LƯỢNG TO HƠN
+  // Nhạc nền Chiptune
   function startBackgroundMusic() {
-    if (bgmInterval) return;
+    if (bgmInterval || !audioCtx) return;
 
     const melody = [
       { freq: 261.63, duration: 0.2 }, { freq: 329.63, duration: 0.2 },
@@ -90,7 +129,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let noteIdx = 0;
 
     bgmInterval = setInterval(() => {
-      if (gameOver || isPaused || !audioCtx) return; // Ngưng phát nhạc khi Pause
+      if (gameOver || isPaused || !audioCtx) return;
 
       const note = melody[noteIdx];
       const osc = audioCtx.createOscillator();
@@ -99,7 +138,6 @@ document.addEventListener("DOMContentLoaded", () => {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(note.freq, audioCtx.currentTime);
 
-      // Đã tăng âm lượng nhạc nền từ 0.03 lên 0.15 (to và rõ hơn)
       gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + note.duration - 0.02);
 
@@ -192,7 +230,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("keydown", (e) => {
     initAudio();
     if (e.code === "KeyP") {
-      togglePause(); // Nhấn phím 'P' để tạm dừng nhanh
+      togglePause();
       return;
     }
     keys[e.code] = true;
@@ -254,17 +292,27 @@ document.addEventListener("DOMContentLoaded", () => {
     currentTarget = getRandomWord();
     const targetEl = document.getElementById("target-word");
     if (targetEl) {
-      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 18px; margin-left:6px;">🔊</span>`;
+      targetEl.innerHTML = `${currentTarget.en} <span id="speak-btn" style="cursor:pointer; font-size: 20px; margin-left:8px; display:inline-block; padding:2px 6px;">🔊</span>`;
       
       const speakBtn = document.getElementById("speak-btn");
       if (speakBtn) {
-        speakBtn.addEventListener("click", () => {
+        speakBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           initAudio();
           speakEnglishWord(currentTarget.en);
         });
+        speakBtn.addEventListener("touchstart", (e) => {
+          e.stopPropagation();
+          initAudio();
+          speakEnglishWord(currentTarget.en);
+        }, { passive: true });
       }
     }
-    speakEnglishWord(currentTarget.en);
+    
+    // Tự động đọc từ khi chuyển từ mới (nếu đã kích hoạt audio)
+    if (isAudioUnlocked) {
+      speakEnglishWord(currentTarget.en);
+    }
   }
 
   let particles = [];
@@ -528,7 +576,6 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.restore();
   }
 
-  // Vẽ màn hình Tạm dừng
   function drawPauseScreen() {
     ctx.save();
     ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
@@ -541,7 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "16px Arial";
-    ctx.fillText("Nhấn '▶️ Tiếp tục' hoặc phím P để chơi tiếp", canvas.width / 2, canvas.height / 2 + 25);
+    ctx.fillText("Nhấn '▶️ Tiếp tục' để chơi tiếp", canvas.width / 2, canvas.height / 2 + 25);
     ctx.restore();
   }
 
@@ -550,7 +597,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isPaused) {
       drawPauseScreen();
-      return; // Ngừng cập nhật trạng thái khi Tạm dừng
+      return;
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -649,10 +696,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     requestAnimationFrame(gameLoop);
-  }
-
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.getVoices();
   }
 
   setNextTargetWord();
