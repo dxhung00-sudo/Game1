@@ -3,6 +3,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
 
+  // Vô hiệu hóa thao tác cuộn/phóng to mặc định của trình duyệt di động trên Canvas
+  canvas.style.touchAction = "none";
+
   const GROUND_Y = 600;
   let gameOver = false;
   let isPaused = false;
@@ -20,7 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
     display: block; margin: 8px auto; padding: 6px 16px; font-size: 14px;
     font-weight: bold; color: #00f0ff; background: #1e293b;
     border: 1px solid #00f0ff; border-radius: 6px; cursor: pointer;
-    box-shadow: 0 0 10px rgba(0,240,255,0.3);
+    box-shadow: 0 0 10px rgba(0,240,255,0.3); touch-action: manipulation;
   `;
   container.insertBefore(pauseBtn, canvas);
 
@@ -104,11 +107,11 @@ document.addEventListener("DOMContentLoaded", () => {
     osc.stop(now + 0.25);
   }
 
-  // --- 3. DỮ LIỆU TỪ VỰNG ---
+  // --- 3. DỮ LIỆU TỪ VỰNG & CẤU HÌNH TỐC ĐỘ BAN ĐẦU ---
   const PACKS = [
-    { id: 1, name: "Beginner (A1-A2)", levels: 10, targetPerLevel: 15, baseSpeed: 2.0 },
-    { id: 2, name: "Intermediate (B1)", levels: 25, targetPerLevel: 20, baseSpeed: 2.6 },
-    { id: 3, name: "Advanced (B2)", levels: 126, targetPerLevel: 25, baseSpeed: 3.2 }
+    { id: 1, name: "Beginner (A1-A2)", levels: 10, targetPerLevel: 15, baseSpeed: 1.2 },
+    { id: 2, name: "Intermediate (B1)", levels: 25, targetPerLevel: 20, baseSpeed: 1.8 },
+    { id: 3, name: "Advanced (B2)", levels: 126, targetPerLevel: 25, baseSpeed: 2.4 }
   ];
 
   let currentPackIdx = 0;
@@ -247,12 +250,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let fallingWords = [];
 
-  // Thuật toán sinh từ chống chồng lấp theo hộp AABB (Axis-Aligned Bounding Box)
   function spawnWords() {
     if (!currentTarget) setNextTargetWord();
 
     const list = rawVocabulary[`pack${currentPackIdx + 1}`];
-    const numWords = Math.floor(Math.random() * 6) + 5; // 5-10 từ
+    const numWords = Math.floor(Math.random() * 6) + 5; // 5 - 10 từ
 
     let options = [currentTarget.vi];
     while (options.length < numWords) {
@@ -263,10 +265,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     options.sort(() => Math.random() - 0.5);
 
-    const packSpeed = PACKS[currentPackIdx].baseSpeed + (currentLevel * 0.25);
+    // Tốc độ ban đầu chậm (Level 1 = 1.2) và tăng nhẹ dần qua mỗi Level (+0.15)
+    const packSpeed = PACKS[currentPackIdx].baseSpeed + ((currentLevel - 1) * 0.15);
     const wordWidth = 95;
     const wordHeight = 36;
-    const margin = 12; // Khoảng cách an toàn giữa các thẻ từ
+    const margin = 12;
 
     const placedBoxes = [];
 
@@ -279,10 +282,8 @@ document.addEventListener("DOMContentLoaded", () => {
       do {
         overlap = false;
         posX = Math.random() * (canvas.width - wordWidth);
-        // Rải vị trí xuất phát theo chiều dọc phía trên khung hình
         posY = -(Math.random() * 350 + 50);
 
-        // Kiểm tra xem vị trí mới có đè lên thẻ từ nào đã tạo không
         for (const box of placedBoxes) {
           if (
             posX < box.x + box.w + margin &&
@@ -298,14 +299,38 @@ document.addEventListener("DOMContentLoaded", () => {
       } while (overlap && attempts < 100);
 
       placedBoxes.push({ x: posX, y: posY, w: wordWidth, h: wordHeight });
-
-      // Cùng chung tốc độ trong 1 đợt để các thẻ giữ nguyên khoảng cách, không đâm vào nhau khi rơi
       fallingWords.push(new FallingWord(options[i], posX, posY, packSpeed));
     }
   }
 
-  // --- 6. XỬ LÝ SỰ KIỆN CLICK / TOUCH ---
-  function handleSelectPoint(clientX, clientY) {
+  // --- 6. XỬ LÝ CẢM ỨNG CHÍNH XÁC TRÊN ĐIỆN THOẠI & CHỘT MÁY TÍNH ---
+  function getCanvasCoordinates(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    }
+
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  }
+
+  function handleInteraction(e) {
+    if (e.type === "touchstart") {
+      e.preventDefault(); // Ngăn thao tác chạm giả lập click
+    }
+
     if (!gameStarted) {
       gameStarted = true;
       initAudio();
@@ -317,9 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isPaused || gameOver) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const clickX = clientX - rect.left;
-    const clickY = clientY - rect.top;
+    const { x: clickX, y: clickY } = getCanvasCoordinates(e);
 
     for (let i = fallingWords.length - 1; i >= 0; i--) {
       const w = fallingWords[i];
@@ -348,13 +371,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  canvas.addEventListener("click", (e) => handleSelectPoint(e.clientX, e.clientY));
-  canvas.addEventListener("touchstart", (e) => {
-    e.preventDefault();
-    if (e.touches.length > 0) {
-      handleSelectPoint(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  }, { passive: false });
+  canvas.addEventListener("click", handleInteraction);
+  canvas.addEventListener("touchstart", handleInteraction, { passive: false });
 
   window.addEventListener("keydown", (e) => {
     if (!gameStarted) {
